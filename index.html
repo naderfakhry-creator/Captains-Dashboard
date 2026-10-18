@@ -313,9 +313,25 @@ function resetDates(prefix) {
 ['stats','viol','tmart','disp','vac'].forEach(p => setDates(p, todayStr(), todayStr()));
 
 // ── API helpers ──────────────────────────────────────────────────────
-function api(params) {
+const _cache = {};
+function _netBanner(msg) {
+  let b = document.getElementById('_net-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = '_net-banner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fca5a5;text-align:center;font-size:13px;padding:8px 12px;font-weight:600;display:none;cursor:pointer';
+    b.onclick = () => { if (_loaded['overview']) loadOverview(); };
+    document.body.prepend(b);
+  }
+  if (msg) { b.textContent = msg + ' — اضغط للمحاولة تاني'; b.style.display = 'block'; }
+  else b.style.display = 'none';
+}
+function api(params, _retry) {
   const qs = Object.entries(params).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
-  return fetch(API+'?'+qs).then(r=>r.json());
+  return fetch(API+'?'+qs).then(r=>r.json()).catch(e=>{
+    if (!_retry) return new Promise((res,rej)=>setTimeout(()=>api(params,true).then(res).catch(rej),4000));
+    throw e;
+  });
 }
 function postApi(body) {
   return fetch(API, {method:'POST', body:JSON.stringify(body)}).then(r=>r.json());
@@ -342,8 +358,13 @@ setInterval(() => { if (_loaded['overview']) loadOverview(); }, 60000);
 // PAGE 1 — Overview
 // ════════════════════════════════════════════════════════════════════
 function loadOverview() {
-  setHtml('ov-content','<div class="spinner">Loading…</div>');
-  api({action:'getDashboard'}).then(renderOverview).catch(e => setHtml('ov-content', errHtml(e.message)));
+  if (!_cache.overview) setHtml('ov-content','<div class="spinner">Loading…</div>');
+  api({action:'getDashboard'})
+    .then(d => { _cache.overview = d; _netBanner(null); renderOverview(d); })
+    .catch(e => {
+      if (_cache.overview) { _netBanner('⚠️ مشكلة في الشبكة — البيانات اللي شايفها من آخر تحديث'); }
+      else { setHtml('ov-content', errHtml(e.message)); }
+    });
 }
 
 function renderOverview(d) {
